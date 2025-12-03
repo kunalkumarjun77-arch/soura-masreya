@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { generateCandidImage, expandPrompt } from './services/geminiService';
+import { generateExpandedImage, expandPrompt } from './services/geminiService';
+
 import { generateRandomScene } from './services/prompt-generator';
 import { saveImageToHistory, getHistoryImages, clearHistoryDB } from './services/storage';
 import { Spinner } from './components/Spinner';
@@ -552,7 +553,14 @@ const App: React.FC = () => {
             }
             
             const imagePart = await fileToGenerativePart(referenceFile);
-            const resultBase64 = await generateCandidImage(finalPrompt, imagePart.data, imagePart.mimeType, aesthetic, selectedAspectRatio);
+            const resultBase64 = await generateExpandedImage(
+    finalPrompt,
+    imagePart.data,
+    imagePart.mimeType,
+    aesthetic,
+    selectedAspectRatio
+);
+
             const newImage = `data:image/png;base64,${resultBase64}`;
             
             const suggestedEffect = suggestEffectForPrompt(finalPrompt);
