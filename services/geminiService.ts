@@ -2,7 +2,7 @@
 
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// نقرأ الـ API key من Vite env
+// اقرأ الـ API key من Vite env
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY ?? "";
 
 if (!apiKey) {
@@ -80,20 +80,10 @@ Subject: ${personaDescription}.
 Expand this into a full scene description.`;
 
   try {
-    const result: any = await textModel.generateContent({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: expansionRequest }],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.9,
-      },
-    });
+    const result: any = await textModel.generateContent(expansionRequest);
 
     const response: any = result.response || {};
-    // أهم حاجة: ما نستدعيش text() كـ function
+    // ناخد text كـ "خاصية" مش function — مفيش () هنا
     const expandedText = ((response as any).text ?? "").toString().trim();
 
     if (!expandedText) {
