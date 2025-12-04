@@ -7,7 +7,7 @@ const apiKey = import.meta.env.VITE_GEMINI_API_KEY ?? "";
 
 if (!apiKey) {
   console.warn(
-    "VITE_GEMINI_API_KEY is missing. Set it locally in .env.local and in Vercel Environment Variables."
+    "VITE_GEMINI_API_KEY is missing. Set it in .env.local locally and in Vercel -> Project Settings -> Environment Variables."
   );
 }
 
@@ -62,11 +62,12 @@ export const expandPrompt = async (
   const shotInstruction =
     shotType === "random" ? "" : shotTypeInstructions[shotType] || "";
 
-  const systemInstruction = `You are a creative director specialized in modern, realistic Egyptian lifestyle photography. 
+  const systemInstruction = `You are a creative director specialized in modern, realistic Egyptian lifestyle photography.
 Your job is to take a short idea and turn it into a vivid, cinematic scene description that feels authentic, unposed, and full of realistic detail. ${shotInstruction}
 
 Rules:
 - The final scene MUST be set in modern-day, contemporary Egypt.
+- No clichés or pharaonic stereotypes unless explicitly requested.
 - The environment, clothing, and people should reflect Egypt today.
 - The output MUST be a single, continuous paragraph.
 - Do NOT use lists or bullet points.
@@ -74,30 +75,44 @@ Rules:
 - Include specific details about the environment, lighting, and clothing.
 - The tone should be descriptive and narrative.`;
 
-  const expansionRequest = `User's Idea: "${shortPrompt}".
+  const promptText = `${systemInstruction}
+
+User's idea: "${shortPrompt}"
 Subject: ${personaDescription}.
 
-Expand this into a full scene description.`;
+Expand this into a full, detailed scene description.`;
 
   try {
-    const result: any = await textModel.generateContent(expansionRequest);
+    const result: any = await textModel.generateContent({
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: promptText }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.9,
+      },
+    });
 
-    const response: any = result.response || {};
-    // ناخد text كـ "خاصية" مش function — مفيش () هنا
-    const expandedText = ((response as any).text ?? "").toString().trim();
+    const response: any = result.response;
+    // هنا بنستخدم text() function من SDK الجديد – مش property
+    const expandedText: string = response?.text ? response.text() : "";
 
-    if (!expandedText) {
+    const cleaned = (expandedText || "").toString().trim();
+
+    if (!cleaned) {
       throw new Error("The model returned an empty description.");
     }
 
-    return expandedText;
+    return cleaned;
   } catch (error) {
     console.error("Error expanding prompt:", error);
     throw new Error("فشل في توسيع وصف المشهد.");
   }
 };
 
-// ---------------------- توليد الصورة (generateCandidImage) ----------------------
+// ---------------------- توليد الصورة ----------------------
 
 export const generateCandidImage = async (
   prompt: string,
@@ -112,9 +127,10 @@ export const generateCandidImage = async (
       : "Clean cinematic photography with realistic colors and natural light.";
 
   const fullPrompt = `
-You are generating a high-resolution photograph that must match aspect ratio: ${aspectRatio}.
+You are generating a brand-new, high-resolution photograph that must match aspect ratio: ${aspectRatio}.
 
-SCENE DESCRIPTION: "${prompt}"
+SCENE DESCRIPTION:
+"${prompt}"
 
 AESTHETIC STYLE:
 ${aestheticInstructions}
@@ -140,8 +156,8 @@ Subtly integrate the signature "M.Hefny" into the environment (for example on a 
       ],
     });
 
-    const response: any = result.response || {};
-    const candidate = response.candidates?.[0];
+    const response: any = result.response;
+    const candidate = response?.candidates?.[0];
     const parts = candidate?.content?.parts || [];
 
     const imagePart = parts.find(
@@ -149,7 +165,7 @@ Subtly integrate the signature "M.Hefny" into the environment (for example on a 
     );
 
     if (!imagePart || !imagePart.inlineData?.data) {
-      throw new Error("لم يتم العثور على بيانات الصورة في الاستجابة.");
+      throw new Error("لم يتم العثور على بيانات الصورة في استجابة Gemini.");
     }
 
     const imageData: string = imagePart.inlineData.data;
@@ -172,3 +188,6 @@ Subtly integrate the signature "M.Hefny" into the environment (for example on a 
     throw new Error(msg);
   }
 };
+
+// alias احتياطي علشان TypeScript suggestion "Did you mean 'generateExpandedImage'?"
+export const generateExpandedImage = generateCandidImage;
