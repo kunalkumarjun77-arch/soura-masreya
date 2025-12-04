@@ -1,18 +1,25 @@
-import { GoogleGenAI, Modality } from "@google/genai";
+// services/geminiService.ts
+
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // نقرأ الـ API key من Vite env
-const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY ?? "";
 
-// لو الـ key مش موجود نطبع تحذير (لكن ما نكسرش build)
 if (!apiKey) {
   console.warn(
-    "VITE_GEMINI_API_KEY is missing. Set it in .env.local and in Vercel Environment Variables."
+    "VITE_GEMINI_API_KEY is missing. Set it locally in .env.local and in Vercel Environment Variables."
   );
 }
 
-// نهيّأ كائن Gemini
-const ai = new GoogleGenAI({
-  apiKey: apiKey || "MISSING_KEY",
+// نهيّأ الكلاينت والموديلات
+const genAI = new GoogleGenerativeAI(apiKey);
+
+const textModel = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
+});
+
+const imageModel = genAI.getGenerativeModel({
+  model: "gemini-1.5-flash",
 });
 
 const shotTypeInstructions: Record<string, string> = {
@@ -25,6 +32,8 @@ const shotTypeInstructions: Record<string, string> = {
   environmental:
     "Describe a wide, environmental scene where the subject is a small but important element, emphasizing the atmosphere and scale of the location.",
 };
+
+// ---------------------- توسيع البرومبت النصي ----------------------
 
 export const expandPrompt = async (
   shortPrompt: string,
@@ -57,13 +66,12 @@ export const expandPrompt = async (
 Your job is to take a short idea and turn it into a vivid, cinematic scene description that feels authentic, unposed, and full of realistic detail. ${shotInstruction}
 
 Rules:
-- The final scene MUST be set in modern-day, contemporary Egypt. No clichés, no pyramids unless the user explicitly requests them.
-- The environment, clothing, and people should reflect Egypt today, not a historical or stereotypical version.
+- The final scene MUST be set in modern-day, contemporary Egypt.
+- The environment, clothing, and people should reflect Egypt today.
 - The output MUST be a single, continuous paragraph.
 - Do NOT use lists or bullet points.
 - Describe a natural, candid activity related to the user's idea.
-- Include specific details about the environment, lighting, and clothing that fit the scene.
-- Weave in a subtle, realistic photographic effect (like soft motion blur, awkward framing, lens flare) to enhance the candid feel.
+- Include specific details about the environment, lighting, and clothing.
 - The tone should be descriptive and narrative.`;
 
   const expansionRequest = `User's Idea: "${shortPrompt}".
@@ -72,36 +80,21 @@ Subject: ${personaDescription}.
 Expand this into a full scene description.`;
 
   try {
-    const response: any = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+    const result: any = await textModel.generateContent({
       contents: [
         {
           role: "user",
           parts: [{ text: expansionRequest }],
         },
       ],
-      config: {
-        systemInstruction,
+      generationConfig: {
         temperature: 0.9,
       },
     });
 
-    // نحاول نطلع النص من أكثر من مكان بدون ما نستدعي text() كـ function
-    let expandedText = "";
-
-    if (typeof response.text === "string") {
-      expandedText = response.text;
-    } else if (
-      response.candidates &&
-      response.candidates[0]?.content?.parts?.length
-    ) {
-      const firstPart = response.candidates[0].content.parts[0];
-      if (typeof firstPart.text === "string") {
-        expandedText = firstPart.text;
-      }
-    }
-
-    expandedText = (expandedText || "").toString().trim();
+    const response: any = result.response || {};
+    // أهم حاجة: ما نستدعيش text() كـ function
+    const expandedText = ((response as any).text ?? "").toString().trim();
 
     if (!expandedText) {
       throw new Error("The model returned an empty description.");
@@ -114,7 +107,8 @@ Expand this into a full scene description.`;
   }
 };
 
-// الفنكشن اللي App.tsx متوقعها
+// ---------------------- توليد الصورة (generateCandidImage) ----------------------
+
 export const generateCandidImage = async (
   prompt: string,
   base64Image: string,
@@ -122,14 +116,13 @@ export const generateCandidImage = async (
   aesthetic: string,
   aspectRatio: string
 ): Promise<string> => {
-  // aesthetic ممكن تستخدمه لو حابب تضيف ستايلات مختلفة، دلوقتي بنستخدمه جوه النص بس
   const aestheticInstructions =
     aesthetic === "candid"
-      ? `Candid, documentary-style photography. Natural light, unposed, realistic expressions.`
-      : `Clean cinematic photography with realistic colors and natural light.`;
+      ? "Candid, documentary-style photography. Natural light, unposed, realistic expressions."
+      : "Clean cinematic photography with realistic colors and natural light.";
 
   const fullPrompt = `
-You are generating a brand-new, high-resolution photograph that must perfectly match an exact aspect ratio: ${aspectRatio}.
+You are generating a high-resolution photograph that must match aspect ratio: ${aspectRatio}.
 
 SCENE DESCRIPTION: "${prompt}"
 
@@ -139,11 +132,8 @@ ${aestheticInstructions}
 Subtly integrate the signature "M.Hefny" into the environment (for example on a coffee cup, shop sign, or small detail), not as a big watermark.
 `.trim();
 
-  const model = "gemini-2.5-flash-image";
-
   try {
-    const response: any = await ai.models.generateContent({
-      model,
+    const result: any = await imageModel.generateContent({
       contents: [
         {
           role: "user",
@@ -158,17 +148,13 @@ Subtly integrate the signature "M.Hefny" into the environment (for example on a 
           ],
         },
       ],
-      config: {
-        responseModalities: [Modality.IMAGE, Modality.TEXT],
-      },
     });
 
+    const response: any = result.response || {};
     const candidate = response.candidates?.[0];
-    if (!candidate?.content?.parts) {
-      throw new Error("لم يتم استلام أي محتوى من نموذج الصور.");
-    }
+    const parts = candidate?.content?.parts || [];
 
-    const imagePart = candidate.content.parts.find(
+    const imagePart = parts.find(
       (p: any) => p.inlineData && p.inlineData.data
     );
 
@@ -180,10 +166,9 @@ Subtly integrate the signature "M.Hefny" into the environment (for example on a 
     return imageData;
   } catch (error: any) {
     console.error("Error generating image:", error);
-
     let msg = "حدث خطأ أثناء إنشاء الصورة. يرجى المحاولة مرة أخرى.";
-    const raw = error?.message || String(error || "");
 
+    const raw = error?.message || String(error || "");
     if (raw.includes("RESOURCE_EXHAUSTED")) {
       msg =
         "تم استهلاك الكوتا الخاصة بـ Google Gemini (RESOURCE_EXHAUSTED). جرّب لاحقًا أو حدّث البيلينج.";
