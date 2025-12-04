@@ -97,7 +97,8 @@ Expand this into a full, detailed scene description.`;
 
     const response: any = result.response;
     // هنا بنستخدم text() function من SDK الجديد – مش property
-    const expandedText: string = response?.text ? response.text() : "";
+    const expandedText = ((response as any).text ?? "").toString().trim();
+
 
     const cleaned = (expandedText || "").toString().trim();
 

@@ -554,11 +554,12 @@ const App: React.FC = () => {
             
             const imagePart = await fileToGenerativePart(referenceFile);
             const resultBase64 = await generateExpandedImage(
-    finalPrompt,
-    imagePart.data,
-    imagePart.mimeType,
-    aesthetic,
-    selectedAspectRatio
+  finalPrompt,
+  imagePart.data,
+  imagePart.mimeType,
+  aesthetic,
+  selectedAspectRatio
+
 );
 
             const newImage = `data:image/png;base64,${resultBase64}`;
